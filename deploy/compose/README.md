@@ -71,6 +71,12 @@ reach the console over HTTPS. For a quick test, an SSH tunnel to
 in `.env`, then:
 
 ```bash
+# Caddy runs as root with every capability dropped, so it can only read
+# files root owns. The console (uid 1000) also reads any CA you put here.
+sudo chown -R root:root certs
+sudo chmod 755 certs && sudo chmod 644 certs/*.pem
+sudo chmod 600 certs/privkey.pem
+
 docker compose --profile proxy up -d --build
 ```
 
@@ -87,8 +93,9 @@ proxy_set_header X-Forwarded-Proto $scheme;
 ## Private CA and LDAP
 
 - **Cinc server with a self-signed or private-CA certificate:** put the CA in
-  `certs/cinc-ca.pem` and uncomment `CINC_CA_CERT_FILE` and the matching
-  `volumes` entry in `compose.yaml`.
+  `certs/cinc-ca.pem` (readable by uid 1000, for example mode 644) and
+  uncomment `CINC_CA_CERT_FILE` and the matching `volumes` entry in
+  `compose.yaml`.
 - **`AUTH_MODE=ldap`:** set the `LDAP_*` values in `cinc-console.env`. For a
   service-account bind, create the password file without a trailing newline
   (it is read verbatim), then uncomment `LDAP_BIND_PASSWORD_FILE` and the
@@ -102,6 +109,9 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 - One instance instead of two replicas. The app is stateless, so more
   instances work as long as they share the same `session_secret`.
+- Docker never restarts an unhealthy container on its own. To match the
+  chart's livenessProbe, the healthcheck kills the server after three
+  consecutive failures, and the restart policy starts a fresh container.
 - No NetworkPolicy equivalent. To restrict egress to the Cinc server and the
   directory, use firewall rules (for example the `DOCKER-USER` iptables chain).
 - `SESSION_SECRET` has no `_FILE` variant, so the entrypoint reads it from the
